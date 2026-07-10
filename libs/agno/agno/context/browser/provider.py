@@ -1,3 +1,23 @@
+"""
+Browser Context Provider
+========================
+
+Browser automation via a configurable backend. Two tools:
+
+- ``query_<id>`` — natural-language reads (navigate, snapshot, extract
+  content from web pages). Interaction tools are excluded.
+- ``update_<id>`` — natural-language writes (click, type, submit forms).
+  Disabled by default (``write=False``).
+
+The default backend is ``PlaywrightMCPBackend``, which runs Playwright's
+official MCP server via stdio. Uses the accessibility tree by default,
+which is ~4x more token-efficient than vision-based approaches.
+
+Read/write enforcement: when ``write=False``, interaction tools
+(click, type, fill_form, evaluate, etc.) are excluded from the sub-agent's
+toolkit via the backend's ``exclude_interaction_tools`` flag.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -14,6 +34,8 @@ if TYPE_CHECKING:
 
 
 class BrowserContextProvider(ContextProvider):
+    """Browser automation via query/update tools, backed by Playwright MCP."""
+
     def __init__(
         self,
         backend: ContextBackend,
@@ -41,8 +63,9 @@ class BrowserContextProvider(ContextProvider):
             stream_sub_agent_events=stream_sub_agent_events,
         )
         self.backend = backend
-        self.instructions_text = instructions if instructions is not None else DEFAULT_BROWSER_INSTRUCTIONS
-        self._agent: Agent | None = None
+        self.custom_instructions = instructions
+        self._read_agent: Agent | None = None
+        self._write_agent: Agent | None = None
 
     def status(self) -> Status:
         return self.backend.status()
@@ -51,10 +74,15 @@ class BrowserContextProvider(ContextProvider):
         return await self.backend.astatus()
 
     async def asetup(self) -> None:
-        await self.backend.asetup()
+        exclude = not self.write
+        try:
+            await self.backend.asetup(exclude_interaction_tools=exclude)  # type: ignore[call-arg]
+        except TypeError:
+            await self.backend.asetup()
 
     async def aclose(self) -> None:
-        self._agent = None
+        self._read_agent = None
+        self._write_agent = None
         await self.backend.aclose()
 
     def query(self, question: str, *, run_context: RunContext | None = None) -> Answer:
@@ -63,7 +91,7 @@ class BrowserContextProvider(ContextProvider):
         )
 
     async def aquery(self, question: str, *, run_context: RunContext | None = None) -> Answer:
-        agent = self._ensure_agent()
+        agent = self._ensure_read_agent()
         kwargs = self._run_kwargs_for_sub_agent(run_context)
         return answer_from_run(await agent.arun(question, **kwargs))
 
@@ -75,19 +103,19 @@ class BrowserContextProvider(ContextProvider):
     async def aupdate(self, instruction: str, *, run_context: RunContext | None = None) -> Answer:
         if not self.write:
             raise NotImplementedError(f"{self.name} is read-only. Set write=True to enable interactions.")
-        agent = self._ensure_agent()
+        agent = self._ensure_write_agent()
         kwargs = self._run_kwargs_for_sub_agent(run_context)
         return answer_from_run(await agent.arun(instruction, **kwargs))
 
     def instructions(self) -> str:
         if self.mode == ContextMode.tools:
-            return (
-                f"`{self.name}`: use browser tools to navigate, take screenshots, and extract content from web pages."
-            )
+            if self.write:
+                return f"`{self.name}`: browser tools for navigation, snapshots, screenshots, and interaction."
+            return f"`{self.name}`: browser tools for navigation, snapshots, and screenshots (read-only)."
         if self.write:
             return (
-                f"`{self.name}`: call `{self.query_tool_name}(question)` to browse the web and find information. "
-                f"Use `{self.update_tool_name}(instruction)` to interact with pages (click, type, submit forms)."
+                f"`{self.name}`: call `{self.query_tool_name}(question)` to browse and find information. "
+                f"Use `{self.update_tool_name}(instruction)` to interact (click, type, submit)."
             )
         return (
             f"`{self.name}`: call `{self.query_tool_name}(question)` to browse the web, "
@@ -102,68 +130,106 @@ class BrowserContextProvider(ContextProvider):
         return self._read_write_tools()
 
     def _all_tools(self) -> list:
-        return self.backend.get_tools()
+        exclude = not self.write
+        try:
+            return self.backend.get_tools(exclude_interaction_tools=exclude)  # type: ignore[call-arg]
+        except TypeError:
+            return self.backend.get_tools()
 
     # ------------------------------------------------------------------
-    # Sub-agent — built lazily
+    # Sub-agents
     # ------------------------------------------------------------------
 
     async def _aget_query_agent(self, run_context):
-        return self._ensure_agent()
+        return self._ensure_read_agent()
 
     async def _aget_update_agent(self, run_context):
-        return self._ensure_agent()
+        if not self.write:
+            raise NotImplementedError(f"{self.name} is read-only. Set write=True to enable interactions.")
+        return self._ensure_write_agent()
 
-    def _ensure_agent(self) -> Agent:
-        if self._agent is None:
-            self._agent = self._build_agent()
-        return self._agent
+    def _ensure_read_agent(self) -> Agent:
+        if self._read_agent is None:
+            self._read_agent = self._build_read_agent()
+        return self._read_agent
 
-    def _build_agent(self) -> Agent:
+    def _ensure_write_agent(self) -> Agent:
+        if self._write_agent is None:
+            self._write_agent = self._build_write_agent()
+        return self._write_agent
+
+    def _build_read_agent(self) -> Agent:
+        try:
+            tools = self.backend.get_tools(exclude_interaction_tools=True)  # type: ignore[call-arg]
+        except TypeError:
+            tools = self.backend.get_tools()
         return Agent(
-            id=self.id,
-            name=self.name,
+            id=f"{self.id}-read",
+            name=f"{self.name} Read",
             model=self.model,
-            instructions=self.instructions_text,
+            instructions=self.custom_instructions or DEFAULT_READ_INSTRUCTIONS,
+            tools=tools,
+            markdown=True,
+        )
+
+    def _build_write_agent(self) -> Agent:
+        return Agent(
+            id=f"{self.id}-write",
+            name=f"{self.name} Write",
+            model=self.model,
+            instructions=self.custom_instructions or DEFAULT_WRITE_INSTRUCTIONS,
             tools=self.backend.get_tools(),
             markdown=True,
         )
 
 
-DEFAULT_BROWSER_INSTRUCTIONS = """\
-You browse the web to find information and complete tasks.
+DEFAULT_READ_INSTRUCTIONS = """\
+You browse the web to find information. You are READ-ONLY.
 
 ## Workflow
 
-1. **Navigate first.** Use `browser_navigate` to go to a URL. If you need
-   to find something, start at a search engine or the site's homepage.
+1. **Navigate first.** Use `browser_navigate` to go to a URL.
 
 2. **Take a snapshot.** Use `browser_snapshot` to get the page's accessibility
-   tree. This shows you all interactive elements with their refs. Reading
-   the snapshot is more token-efficient than screenshots for most tasks.
+   tree. This shows interactive elements with their targets.
 
-3. **Use screenshots sparingly.** Only use `browser_screenshot` when you need
-   to see visual layout, images, or content not captured in the accessibility
-   tree (charts, diagrams, videos).
+3. **Use screenshots sparingly.** Only use `browser_take_screenshot` when you
+   need visual layout, images, or content not in the accessibility tree.
 
-4. **Extract information.** Read the snapshot or screenshot to find what
-   you need. Quote relevant text verbatim. Include URLs for pages you visit.
+4. **Extract information.** Read the snapshot to find what you need. Quote
+   relevant text verbatim. Include URLs for pages you visit.
 
-5. **Navigate between pages.** Click links (if write tools enabled) or
-   navigate directly to new URLs to explore.
+5. **Navigate via URL.** Use `browser_navigate` for new pages. You cannot
+   click links — use the URL directly.
 
-## Element References
+## Safety
 
-The accessibility tree includes `ref` attributes for interactive elements.
-Use these refs with interaction tools:
-- `browser_click(element="ref", ref="e42")` — click element with ref e42
-- `browser_type(element="ref", ref="e42", text="...")` — type into element
+- You are read-only. You cannot click, type, or submit forms.
+- If you need to interact with a page, say so and stop.
+"""
+
+
+DEFAULT_WRITE_INSTRUCTIONS = """\
+You browse the web and interact with pages.
+
+## Workflow
+
+1. **Navigate first.** Use `browser_navigate` to go to a URL.
+
+2. **Take a snapshot.** Use `browser_snapshot` to get the page's accessibility
+   tree. Elements have `target` attributes for interaction.
+
+3. **Interact with elements.** Use the target from the snapshot:
+   - `browser_click(target="Submit button")` — click an element
+   - `browser_type(target="Search input", text="query")` — type text
+
+4. **Use screenshots sparingly.** Only use `browser_take_screenshot` when you
+   need visual layout not captured in the snapshot.
 
 ## Safety
 
 - You are operating a real browser. Actions affect real websites.
 - Never submit forms with sensitive data unless explicitly instructed.
 - Never authenticate or enter credentials.
-- Avoid rapid repeated requests to the same site.
 - If a page asks for login, report it and stop.
 """
