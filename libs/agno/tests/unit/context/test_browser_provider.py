@@ -1,11 +1,8 @@
 """Unit tests for BrowserContextProvider."""
 
-from __future__ import annotations
-
 import pytest
 
 from agno.context.browser import BrowserContextProvider, PlaywrightMCPBackend
-from agno.context.browser.playwright_mcp import INTERACTION_TOOLS
 from agno.context.mode import ContextMode
 
 
@@ -46,30 +43,29 @@ class TestPlaywrightMCPBackend:
         backend = PlaywrightMCPBackend(tool_name_prefix="pw_")
         assert backend.tool_name_prefix == "pw_"
 
-    def test_interaction_tools_constant_exists(self):
-        assert "browser_click" in INTERACTION_TOOLS
-        assert "browser_type" in INTERACTION_TOOLS
-        assert "browser_evaluate" in INTERACTION_TOOLS
-
 
 class TestBrowserContextProvider:
-    def test_default_is_read_only(self):
+    def test_default_id_and_name(self):
         backend = PlaywrightMCPBackend()
         provider = BrowserContextProvider(backend=backend)
-        assert provider.read is True
-        assert provider.write is False
+        assert provider.id == "browser"
+        assert provider.name == "Browser"
 
-    def test_tool_names(self):
+    def test_custom_id_and_name(self):
+        backend = PlaywrightMCPBackend()
+        provider = BrowserContextProvider(backend=backend, id="chrome", name="Chrome Browser")
+        assert provider.id == "chrome"
+        assert provider.name == "Chrome Browser"
+
+    def test_query_tool_name(self):
         backend = PlaywrightMCPBackend()
         provider = BrowserContextProvider(backend=backend)
         assert provider.query_tool_name == "query_browser"
-        assert provider.update_tool_name == "update_browser"
 
-    def test_custom_id_changes_tool_names(self):
+    def test_custom_id_changes_query_tool_name(self):
         backend = PlaywrightMCPBackend()
         provider = BrowserContextProvider(backend=backend, id="chrome")
         assert provider.query_tool_name == "query_chrome"
-        assert provider.update_tool_name == "update_chrome"
 
     def test_status_delegates_to_backend(self):
         backend = PlaywrightMCPBackend()
@@ -78,45 +74,24 @@ class TestBrowserContextProvider:
         assert status.ok is True
         assert "playwright-mcp" in status.detail
 
-    def test_instructions_read_only_mode(self):
+    def test_instructions_default_mode(self):
         backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, write=False)
+        provider = BrowserContextProvider(backend=backend)
         instructions = provider.instructions()
         assert "query_browser" in instructions
-        assert "update_browser" not in instructions
 
-    def test_instructions_read_write_mode(self):
+    def test_instructions_tools_mode(self):
         backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, write=True)
+        provider = BrowserContextProvider(backend=backend, mode=ContextMode.tools)
         instructions = provider.instructions()
-        assert "query_browser" in instructions
-        assert "update_browser" in instructions
+        assert "browser tools" in instructions.lower()
 
-    def test_instructions_tools_mode_readonly(self):
+    def test_default_tools_returns_query_tool(self):
         backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, mode=ContextMode.tools, write=False)
-        instructions = provider.instructions()
-        assert "read-only" in instructions
-
-    def test_instructions_tools_mode_write(self):
-        backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, mode=ContextMode.tools, write=True)
-        instructions = provider.instructions()
-        assert "interaction" in instructions
-
-    def test_default_tools_returns_query_tool_only_when_read_only(self):
-        backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, write=False)
+        provider = BrowserContextProvider(backend=backend)
         tools = provider.get_tools()
         tool_names = [t.name for t in tools]
         assert tool_names == ["query_browser"]
-
-    def test_default_tools_returns_both_when_write_enabled(self):
-        backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, write=True)
-        tools = provider.get_tools()
-        tool_names = [t.name for t in tools]
-        assert tool_names == ["query_browser", "update_browser"]
 
     def test_all_tools_mode_returns_backend_tools(self):
         backend = PlaywrightMCPBackend()
@@ -130,55 +105,11 @@ class TestBrowserContextProvider:
         with pytest.raises(NotImplementedError, match="async-only"):
             provider.query("search something")
 
-    def test_sync_update_raises_not_implemented(self):
-        backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, write=True)
-        with pytest.raises(NotImplementedError, match="async-only"):
-            provider.update("click something")
-
-    @pytest.mark.asyncio
-    async def test_aupdate_raises_when_read_only(self):
-        backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, write=False)
-        with pytest.raises(NotImplementedError, match="read-only"):
-            await provider.aupdate("click something")
-
-    @pytest.mark.asyncio
-    async def test_aget_update_agent_raises_when_read_only(self):
-        backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, write=False)
-        with pytest.raises(NotImplementedError, match="read-only"):
-            await provider._aget_update_agent(None)
-
-    def test_custom_tool_names(self):
-        backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(
-            backend=backend,
-            query_tool_name="search_web",
-            update_tool_name="interact_web",
-        )
-        assert provider.query_tool_name == "search_web"
-        assert provider.update_tool_name == "interact_web"
-
-    def test_stream_sub_agent_events_forwarded(self):
-        backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, stream_sub_agent_events=False)
-        assert provider.stream_sub_agent_events is False
-
     @pytest.mark.asyncio
     async def test_aclose_clears_agent_cache(self):
         backend = PlaywrightMCPBackend()
         provider = BrowserContextProvider(backend=backend)
-        _ = provider._ensure_read_agent()
-        assert provider._read_agent is not None
+        _ = provider._ensure_agent()
+        assert provider._agent is not None
         await provider.aclose()
-        assert provider._read_agent is None
-
-    def test_separate_read_write_agents(self):
-        backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, write=True)
-        read_agent = provider._ensure_read_agent()
-        write_agent = provider._ensure_write_agent()
-        assert read_agent is not write_agent
-        assert read_agent.id == "browser-read"
-        assert write_agent.id == "browser-write"
+        assert provider._agent is None

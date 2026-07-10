@@ -9,7 +9,7 @@ from agno.utils.log import log_info, log_warning
 
 BrowserType = Literal["chromium", "firefox", "webkit"]
 
-# Tools that modify page state — excluded when provider has write=False
+# Tools that modify page state — excluded for read-only mode
 INTERACTION_TOOLS = {
     "browser_click",
     "browser_type",
@@ -43,7 +43,6 @@ class PlaywrightMCPBackend(ContextBackend):
         self.tool_name_prefix = tool_name_prefix
         self.timeout_seconds = timeout_seconds
         self._mcp_tools: Any = None
-        self._exclude_interaction: bool = False
 
     def status(self) -> Status:
         if self._mcp_tools is None:
@@ -55,13 +54,12 @@ class PlaywrightMCPBackend(ContextBackend):
     async def astatus(self) -> Status:
         return self.status()
 
-    def get_tools(self, *, exclude_interaction_tools: bool = False) -> list:
-        if self._mcp_tools is None or self._exclude_interaction != exclude_interaction_tools:
-            self._mcp_tools = self._build_tools(exclude_interaction_tools)
-            self._exclude_interaction = exclude_interaction_tools
+    def get_tools(self) -> list:
+        if self._mcp_tools is None:
+            self._mcp_tools = self._build_tools()
         return [self._mcp_tools]
 
-    def _build_tools(self, exclude_interaction_tools: bool) -> Any:
+    def _build_tools(self) -> Any:
         from mcp import StdioServerParameters
 
         from agno.tools.mcp import MCPTools
@@ -74,23 +72,18 @@ class PlaywrightMCPBackend(ContextBackend):
 
         server_params = StdioServerParameters(command="npx", args=cmd_args)
 
-        exclude = set(self.exclude_tools) if self.exclude_tools else set()
-        if exclude_interaction_tools:
-            exclude.update(INTERACTION_TOOLS)
-
         return MCPTools(
             server_params=server_params,
             transport="stdio",
             include_tools=self.include_tools,
-            exclude_tools=list(exclude) if exclude else None,
+            exclude_tools=self.exclude_tools,
             tool_name_prefix=self.tool_name_prefix,
             timeout_seconds=self.timeout_seconds,
         )
 
-    async def asetup(self, *, exclude_interaction_tools: bool = False) -> None:
-        if self._mcp_tools is None or self._exclude_interaction != exclude_interaction_tools:
-            self._mcp_tools = self._build_tools(exclude_interaction_tools)
-            self._exclude_interaction = exclude_interaction_tools
+    async def asetup(self) -> None:
+        if self._mcp_tools is None:
+            self._mcp_tools = self._build_tools()
         if getattr(self._mcp_tools, "initialized", False):
             return
         log_info(f"PlaywrightMCPBackend: starting npx @playwright/mcp@latest ({self.browser})")
