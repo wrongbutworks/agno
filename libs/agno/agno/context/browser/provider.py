@@ -25,8 +25,21 @@ class BrowserContextProvider(ContextProvider):
         model: Model | None = None,
         read: bool = True,
         write: bool = False,
+        query_tool_name: str | None = None,
+        update_tool_name: str | None = None,
+        stream_sub_agent_events: bool = True,
     ) -> None:
-        super().__init__(id=id, name=name, mode=mode, model=model, read=read, write=write)
+        super().__init__(
+            id=id,
+            name=name,
+            mode=mode,
+            model=model,
+            read=read,
+            write=write,
+            query_tool_name=query_tool_name,
+            update_tool_name=update_tool_name,
+            stream_sub_agent_events=stream_sub_agent_events,
+        )
         self.backend = backend
         self.instructions_text = instructions if instructions is not None else DEFAULT_BROWSER_INSTRUCTIONS
         self._agent: Agent | None = None
@@ -45,9 +58,9 @@ class BrowserContextProvider(ContextProvider):
         await self.backend.aclose()
 
     def query(self, question: str, *, run_context: RunContext | None = None) -> Answer:
-        agent = self._ensure_agent()
-        kwargs = self._run_kwargs_for_sub_agent(run_context)
-        return answer_from_run(agent.run(question, **kwargs))
+        raise NotImplementedError(
+            "BrowserContextProvider does not support sync query(); use aquery() (MCP sessions are async-only)."
+        )
 
     async def aquery(self, question: str, *, run_context: RunContext | None = None) -> Answer:
         agent = self._ensure_agent()
@@ -55,11 +68,9 @@ class BrowserContextProvider(ContextProvider):
         return answer_from_run(await agent.arun(question, **kwargs))
 
     def update(self, instruction: str, *, run_context: RunContext | None = None) -> Answer:
-        if not self.write:
-            raise NotImplementedError(f"{self.name} is read-only. Set write=True to enable interactions.")
-        agent = self._ensure_agent()
-        kwargs = self._run_kwargs_for_sub_agent(run_context)
-        return answer_from_run(agent.run(instruction, **kwargs))
+        raise NotImplementedError(
+            "BrowserContextProvider does not support sync update(); use aupdate() (MCP sessions are async-only)."
+        )
 
     async def aupdate(self, instruction: str, *, run_context: RunContext | None = None) -> Answer:
         if not self.write:

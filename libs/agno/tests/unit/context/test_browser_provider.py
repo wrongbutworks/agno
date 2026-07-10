@@ -102,10 +102,16 @@ class TestBrowserContextProvider:
         # Backend returns MCPTools wrapped in a list
         assert len(tools) == 1
 
-    def test_update_raises_when_read_only(self):
+    def test_sync_query_raises_not_implemented(self):
         backend = PlaywrightMCPBackend()
-        provider = BrowserContextProvider(backend=backend, write=False)
-        with pytest.raises(NotImplementedError, match="read-only"):
+        provider = BrowserContextProvider(backend=backend)
+        with pytest.raises(NotImplementedError, match="async-only"):
+            provider.query("search something")
+
+    def test_sync_update_raises_not_implemented(self):
+        backend = PlaywrightMCPBackend()
+        provider = BrowserContextProvider(backend=backend, write=True)
+        with pytest.raises(NotImplementedError, match="async-only"):
             provider.update("click something")
 
     @pytest.mark.asyncio
@@ -114,6 +120,21 @@ class TestBrowserContextProvider:
         provider = BrowserContextProvider(backend=backend, write=False)
         with pytest.raises(NotImplementedError, match="read-only"):
             await provider.aupdate("click something")
+
+    def test_custom_tool_names(self):
+        backend = PlaywrightMCPBackend()
+        provider = BrowserContextProvider(
+            backend=backend,
+            query_tool_name="search_web",
+            update_tool_name="interact_web",
+        )
+        assert provider.query_tool_name == "search_web"
+        assert provider.update_tool_name == "interact_web"
+
+    def test_stream_sub_agent_events_forwarded(self):
+        backend = PlaywrightMCPBackend()
+        provider = BrowserContextProvider(backend=backend, stream_sub_agent_events=False)
+        assert provider.stream_sub_agent_events is False
 
     @pytest.mark.asyncio
     async def test_aclose_clears_agent_cache(self):

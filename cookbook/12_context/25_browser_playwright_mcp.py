@@ -34,14 +34,14 @@ backend = PlaywrightMCPBackend(headless=True)
 # natural language browsing requests
 browser = BrowserContextProvider(
     backend=backend,
-    model=OpenAIResponses(id="gpt-5.4-mini"),  # Model for the sub-agent
+    model=OpenAIResponses(id="gpt-5.5"),  # Model for the sub-agent
 )
 
 # ---------------------------------------------------------------------------
 # Create the Agent
 # ---------------------------------------------------------------------------
 agent = Agent(
-    model=OpenAIResponses(id="gpt-5.4"),
+    model=OpenAIResponses(id="gpt-5.5"),
     tools=browser.get_tools(),
     instructions=browser.instructions(),
     markdown=True,
