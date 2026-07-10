@@ -13,8 +13,6 @@ Requires:
     Node.js 18+ (npx downloads @playwright/mcp on first run)
 """
 
-from __future__ import annotations
-
 import asyncio
 
 from agno.agent import Agent
