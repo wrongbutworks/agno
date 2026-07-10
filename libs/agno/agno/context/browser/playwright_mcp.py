@@ -2,38 +2,50 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 from agno.context.backend import ContextBackend
 from agno.context.provider import Status
 from agno.utils.log import log_info, log_warning
 
+BrowserType = Literal["chromium", "firefox", "webkit"]
+
 
 class PlaywrightMCPBackend(ContextBackend):
+    """Browser automation via Playwright's official MCP server.
+
+    Runs `npx @playwright/mcp` as a subprocess and exposes browser tools
+    (navigate, snapshot, screenshot, click, type, etc.) to the calling
+    agent. Uses the accessibility tree by default, which is ~4x more
+    token-efficient than vision-based approaches.
+
+    Requires Node.js 18+ (npx downloads the package on first run).
+    """
+
     def __init__(
         self,
         *,
-        command: str = "npx",
-        args: Sequence[str] | None = None,
         headless: bool = True,
+        browser: BrowserType = "chromium",
+        version: str = "latest",
         include_tools: Sequence[str] | None = None,
         exclude_tools: Sequence[str] | None = None,
         timeout_seconds: int = 60,
     ) -> None:
-        self.command = command
-        self.args = list(args) if args is not None else ["@playwright/mcp@latest"]
         self.headless = headless
-        self.timeout_seconds = timeout_seconds
+        self.browser: BrowserType = browser
+        self.version = version
         self.include_tools = list(include_tools) if include_tools is not None else None
         self.exclude_tools = list(exclude_tools) if exclude_tools is not None else None
+        self.timeout_seconds = timeout_seconds
         self._mcp_tools: Any = None
 
     def status(self) -> Status:
         if self._mcp_tools is None:
-            return Status(ok=True, detail="playwright-mcp (not connected)")
+            return Status(ok=True, detail=f"playwright-mcp ({self.browser}, not connected)")
         if getattr(self._mcp_tools, "initialized", False):
-            return Status(ok=True, detail="playwright-mcp (connected)")
-        return Status(ok=True, detail="playwright-mcp (connecting)")
+            return Status(ok=True, detail=f"playwright-mcp ({self.browser}, connected)")
+        return Status(ok=True, detail=f"playwright-mcp ({self.browser}, connecting)")
 
     async def astatus(self) -> Status:
         return await asyncio.to_thread(self.status)
@@ -48,15 +60,13 @@ class PlaywrightMCPBackend(ContextBackend):
 
         from agno.tools.mcp import MCPTools
 
-        # Build command args with headless flag
-        cmd_args = list(self.args)
-        if self.headless and "--headless" not in cmd_args:
+        cmd_args = [f"@playwright/mcp@{self.version}"]
+        if self.headless:
             cmd_args.append("--headless")
+        if self.browser != "chromium":
+            cmd_args.append(f"--browser={self.browser}")
 
-        server_params = StdioServerParameters(
-            command=self.command,
-            args=cmd_args,
-        )
+        server_params = StdioServerParameters(command="npx", args=cmd_args)
 
         return MCPTools(
             server_params=server_params,
@@ -76,7 +86,7 @@ class PlaywrightMCPBackend(ContextBackend):
             self._mcp_tools = self._build_tools()
         if getattr(self._mcp_tools, "initialized", False):
             return
-        log_info(f"PlaywrightMCPBackend: starting {self.command} {' '.join(self.args)}")
+        log_info(f"PlaywrightMCPBackend: starting npx @playwright/mcp@{self.version} ({self.browser})")
         try:
             await self._mcp_tools._connect()
         except Exception as exc:

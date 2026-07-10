@@ -14,15 +14,32 @@ class TestPlaywrightMCPBackend:
         status = backend.status()
         assert status.ok is True
         assert "not connected" in status.detail
+        assert "chromium" in status.detail
 
-    def test_headless_flag_added_to_args(self):
-        backend = PlaywrightMCPBackend(headless=True)
-        # _build_tools adds --headless to args
+    def test_default_browser_is_chromium(self):
+        backend = PlaywrightMCPBackend()
+        assert backend.browser == "chromium"
+
+    def test_custom_browser(self):
+        backend = PlaywrightMCPBackend(browser="firefox")
+        assert backend.browser == "firefox"
+        assert "firefox" in backend.status().detail
+
+    def test_headless_default_true(self):
+        backend = PlaywrightMCPBackend()
         assert backend.headless is True
 
-    def test_headless_false_no_flag(self):
+    def test_headless_false(self):
         backend = PlaywrightMCPBackend(headless=False)
         assert backend.headless is False
+
+    def test_default_version_is_latest(self):
+        backend = PlaywrightMCPBackend()
+        assert backend.version == "latest"
+
+    def test_custom_version(self):
+        backend = PlaywrightMCPBackend(version="1.2.3")
+        assert backend.version == "1.2.3"
 
     def test_default_include_tools_is_none(self):
         backend = PlaywrightMCPBackend()
@@ -97,9 +114,7 @@ class TestBrowserContextProvider:
     def test_all_tools_mode_returns_backend_tools(self):
         backend = PlaywrightMCPBackend()
         provider = BrowserContextProvider(backend=backend, mode=ContextMode.tools)
-        # In tools mode, get_tools returns _all_tools which delegates to backend
         tools = provider.get_tools()
-        # Backend returns MCPTools wrapped in a list
         assert len(tools) == 1
 
     def test_sync_query_raises_not_implemented(self):
@@ -140,7 +155,6 @@ class TestBrowserContextProvider:
     async def test_aclose_clears_agent_cache(self):
         backend = PlaywrightMCPBackend()
         provider = BrowserContextProvider(backend=backend)
-        # Force agent creation
         _ = provider._ensure_agent()
         assert provider._agent is not None
         await provider.aclose()
