@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from agno.context.browser import (
-    INTERACTION_TOOLS,
-    BrowserContextProvider,
-    PlaywrightMCPBackend,
-)
+from agno.context.browser import BrowserContextProvider, PlaywrightMCPBackend
+from agno.context.browser.playwright_mcp import INTERACTION_TOOLS
 from agno.context.mode import ContextMode
 
 
