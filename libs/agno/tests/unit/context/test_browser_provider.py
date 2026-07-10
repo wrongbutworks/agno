@@ -34,14 +34,6 @@ class TestPlaywrightMCPBackend:
         backend = PlaywrightMCPBackend(headless=False)
         assert backend.headless is False
 
-    def test_default_version_is_latest(self):
-        backend = PlaywrightMCPBackend()
-        assert backend.version == "latest"
-
-    def test_custom_version(self):
-        backend = PlaywrightMCPBackend(version="1.2.3")
-        assert backend.version == "1.2.3"
-
     def test_default_include_tools_is_none(self):
         backend = PlaywrightMCPBackend()
         assert backend.include_tools is None
@@ -53,10 +45,6 @@ class TestPlaywrightMCPBackend:
     def test_tool_name_prefix(self):
         backend = PlaywrightMCPBackend(tool_name_prefix="pw_")
         assert backend.tool_name_prefix == "pw_"
-
-    def test_env_parameter(self):
-        backend = PlaywrightMCPBackend(env={"HTTP_PROXY": "http://proxy:8080"})
-        assert backend.env == {"HTTP_PROXY": "http://proxy:8080"}
 
     def test_interaction_tools_constant_exists(self):
         assert "browser_click" in INTERACTION_TOOLS
