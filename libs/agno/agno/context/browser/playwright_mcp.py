@@ -7,8 +7,6 @@ from agno.context.backend import ContextBackend
 from agno.context.provider import Status
 from agno.utils.log import log_info, log_warning
 
-BrowserType = Literal["chromium", "firefox", "webkit"]
-
 # Tools that modify page state — excluded when readonly=True
 INTERACTION_TOOLS = {
     "browser_click",
@@ -30,7 +28,7 @@ class PlaywrightMCPBackend(ContextBackend):
         self,
         *,
         headless: bool = True,
-        browser: BrowserType = "chromium",
+        browser: Literal["chromium", "firefox", "webkit"] = "chromium",
         readonly: bool = True,
         include_tools: Sequence[str] | None = None,
         exclude_tools: Sequence[str] | None = None,
@@ -38,7 +36,7 @@ class PlaywrightMCPBackend(ContextBackend):
         timeout_seconds: int = 60,
     ) -> None:
         self.headless = headless
-        self.browser: BrowserType = browser
+        self.browser = browser
         self.readonly = readonly
         self.include_tools = list(include_tools) if include_tools is not None else None
         self.exclude_tools = list(exclude_tools) if exclude_tools is not None else None
