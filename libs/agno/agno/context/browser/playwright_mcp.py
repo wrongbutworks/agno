@@ -19,14 +19,18 @@ from agno.utils.log import log_warning
 
 _INTERACTION_TOOLS: list[str] = [
     "browser_click",
-    "browser_type",
-    "browser_fill_form",
-    "browser_select_option",
+    "browser_close",
     "browser_drag",
-    "browser_file_upload",
-    "browser_handle_dialog",
-    "browser_press_key",
+    "browser_drop",
     "browser_evaluate",
+    "browser_file_upload",
+    "browser_fill_form",
+    "browser_handle_dialog",
+    "browser_hover",
+    "browser_press_key",
+    "browser_run_code_unsafe",
+    "browser_select_option",
+    "browser_type",
 ]
 
 
