@@ -11,14 +11,13 @@ Requires Node.js 18+ (npx downloads the package on first run).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import Any, Literal
 
 from agno.context.backend import ContextBackend
 from agno.context.provider import Status
 from agno.utils.log import log_warning
 
-_INTERACTION_TOOLS: Sequence[str] = (
+_INTERACTION_TOOLS: list[str] = [
     "browser_click",
     "browser_type",
     "browser_fill_form",
@@ -28,7 +27,7 @@ _INTERACTION_TOOLS: Sequence[str] = (
     "browser_handle_dialog",
     "browser_press_key",
     "browser_evaluate",
-)
+]
 
 
 class PlaywrightMCPBackend(ContextBackend):
@@ -40,16 +39,16 @@ class PlaywrightMCPBackend(ContextBackend):
         headless: bool = True,
         browser: Literal["chromium", "firefox", "webkit"] = "chromium",
         readonly: bool = True,
-        include_tools: Sequence[str] | None = None,
-        exclude_tools: Sequence[str] | None = None,
+        include_tools: list[str] | None = None,
+        exclude_tools: list[str] | None = None,
         tool_name_prefix: str | None = None,
         timeout_seconds: int = 60,
     ) -> None:
         self.headless = headless
         self.browser = browser
         self.readonly = readonly
-        self.include_tools = list(include_tools) if include_tools is not None else None
-        self.exclude_tools = list(exclude_tools) if exclude_tools is not None else None
+        self.include_tools = include_tools
+        self.exclude_tools = exclude_tools
         self.tool_name_prefix = tool_name_prefix
         self.timeout_seconds = timeout_seconds
         self._mcp_tools: Any = None
@@ -81,9 +80,7 @@ class PlaywrightMCPBackend(ContextBackend):
         if self.browser != "chromium":
             cmd_args.append(f"--browser={self.browser}")
 
-        exclude = list(self.exclude_tools) if self.exclude_tools else []
-        if self.readonly:
-            exclude.extend(_INTERACTION_TOOLS)
+        exclude = (self.exclude_tools or []) + (_INTERACTION_TOOLS if self.readonly else [])
 
         return MCPTools(
             server_params=StdioServerParameters(command="npx", args=cmd_args),
