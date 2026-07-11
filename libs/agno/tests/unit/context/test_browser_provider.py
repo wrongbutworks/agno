@@ -7,12 +7,12 @@ from agno.context.mode import ContextMode
 
 
 class TestPlaywrightMCPBackend:
-    def test_default_status_not_connected(self):
+    def test_status_shows_browser_and_mode(self):
         backend = PlaywrightMCPBackend()
         status = backend.status()
         assert status.ok is True
-        assert "not connected" in status.detail
         assert "chromium" in status.detail
+        assert "headless" in status.detail
 
     def test_default_browser_is_chromium(self):
         backend = PlaywrightMCPBackend()

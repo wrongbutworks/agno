@@ -37,11 +37,8 @@ class PlaywrightMCPBackend(ContextBackend):
         self._mcp_tools: Any = None
 
     def status(self) -> Status:
-        if self._mcp_tools is None:
-            return Status(ok=True, detail=f"playwright-mcp ({self.browser}, not connected)")
-        if getattr(self._mcp_tools, "initialized", False):
-            return Status(ok=True, detail=f"playwright-mcp ({self.browser}, connected)")
-        return Status(ok=True, detail=f"playwright-mcp ({self.browser}, pending)")
+        mode = "headless" if self.headless else "headed"
+        return Status(ok=True, detail=f"playwright-mcp ({self.browser}, {mode})")
 
     async def astatus(self) -> Status:
         return self.status()
