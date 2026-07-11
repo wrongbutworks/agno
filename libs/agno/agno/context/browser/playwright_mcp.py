@@ -3,9 +3,6 @@
 Runs `npx @playwright/mcp@latest` as a subprocess and exposes browser
 tools (navigate, snapshot, screenshot, click, type) to the calling agent.
 
-Default is readonly=True, which excludes interaction tools (click, type,
-etc.) for safe browsing. Set readonly=False for full browser control.
-
 Requires Node.js 18+ (npx downloads the package on first run).
 """
 
@@ -17,22 +14,6 @@ from agno.context.backend import ContextBackend
 from agno.context.provider import Status
 from agno.utils.log import log_warning
 
-_INTERACTION_TOOLS: list[str] = [
-    "browser_click",
-    "browser_close",
-    "browser_drag",
-    "browser_drop",
-    "browser_evaluate",
-    "browser_file_upload",
-    "browser_fill_form",
-    "browser_handle_dialog",
-    "browser_hover",
-    "browser_press_key",
-    "browser_run_code_unsafe",
-    "browser_select_option",
-    "browser_type",
-]
-
 
 class PlaywrightMCPBackend(ContextBackend):
     """Backend for `BrowserContextProvider` that runs Playwright's MCP server."""
@@ -42,7 +23,6 @@ class PlaywrightMCPBackend(ContextBackend):
         *,
         headless: bool = True,
         browser: Literal["chromium", "firefox", "webkit"] = "chromium",
-        readonly: bool = True,
         include_tools: list[str] | None = None,
         exclude_tools: list[str] | None = None,
         tool_name_prefix: str | None = None,
@@ -50,7 +30,6 @@ class PlaywrightMCPBackend(ContextBackend):
     ) -> None:
         self.headless = headless
         self.browser = browser
-        self.readonly = readonly
         self.include_tools = include_tools
         self.exclude_tools = exclude_tools
         self.tool_name_prefix = tool_name_prefix
@@ -58,12 +37,11 @@ class PlaywrightMCPBackend(ContextBackend):
         self._mcp_tools: Any = None
 
     def status(self) -> Status:
-        mode = "readonly" if self.readonly else "read-write"
         if self._mcp_tools is None:
-            return Status(ok=True, detail=f"playwright-mcp ({self.browser}, {mode}, not connected)")
+            return Status(ok=True, detail=f"playwright-mcp ({self.browser}, not connected)")
         if getattr(self._mcp_tools, "initialized", False):
-            return Status(ok=True, detail=f"playwright-mcp ({self.browser}, {mode}, connected)")
-        return Status(ok=True, detail=f"playwright-mcp ({self.browser}, {mode}, pending)")
+            return Status(ok=True, detail=f"playwright-mcp ({self.browser}, connected)")
+        return Status(ok=True, detail=f"playwright-mcp ({self.browser}, pending)")
 
     async def astatus(self) -> Status:
         return self.status()
@@ -84,13 +62,11 @@ class PlaywrightMCPBackend(ContextBackend):
         if self.browser != "chromium":
             cmd_args.append(f"--browser={self.browser}")
 
-        exclude = (self.exclude_tools or []) + (_INTERACTION_TOOLS if self.readonly else [])
-
         return MCPTools(
             server_params=StdioServerParameters(command="npx", args=cmd_args),
             transport="stdio",
             include_tools=self.include_tools,
-            exclude_tools=exclude if exclude else None,
+            exclude_tools=self.exclude_tools,
             tool_name_prefix=self.tool_name_prefix,
             timeout_seconds=self.timeout_seconds,
         )

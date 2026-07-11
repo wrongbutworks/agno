@@ -5,9 +5,8 @@ Browser Context Provider
 Browser automation via a configurable backend. Wraps backend tools in a
 sub-agent that handles natural-language browsing requests.
 
-Default backend is ``PlaywrightMCPBackend`` with ``readonly=True``, which
-excludes interaction tools (click, type, etc.) for safe browsing. Set
-``readonly=False`` on the backend for full browser control.
+Default backend is ``PlaywrightMCPBackend``, which runs Playwright's
+MCP server and exposes all browser tools (navigate, click, type, etc.).
 """
 
 from __future__ import annotations

@@ -43,16 +43,6 @@ class TestPlaywrightMCPBackend:
         backend = PlaywrightMCPBackend(tool_name_prefix="pw_")
         assert backend.tool_name_prefix == "pw_"
 
-    def test_readonly_default_true(self):
-        backend = PlaywrightMCPBackend()
-        assert backend.readonly is True
-        assert "readonly" in backend.status().detail
-
-    def test_readonly_false(self):
-        backend = PlaywrightMCPBackend(readonly=False)
-        assert backend.readonly is False
-        assert "read-write" in backend.status().detail
-
 
 class TestBrowserContextProvider:
     def test_default_id_and_name(self):
