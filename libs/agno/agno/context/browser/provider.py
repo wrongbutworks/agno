@@ -1,3 +1,14 @@
+"""
+Browser Context Provider
+========================
+
+Browser automation via a configurable backend. Wraps backend tools in a
+sub-agent that handles natural-language browsing requests.
+
+Default backend is PlaywrightMCPBackend (readonly=True), which runs
+Playwright's MCP server with interaction tools excluded for safety.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -62,11 +73,22 @@ class BrowserContextProvider(ContextProvider):
             "navigate pages, and extract information."
         )
 
+    # ------------------------------------------------------------------
+    # Mode resolution
+    # ------------------------------------------------------------------
+
+    # Wrap in a query_browser sub-agent by default so the calling agent
+    # gets a synthesized answer back instead of orchestrating raw browser
+    # tools. mode=tools surfaces the backend's tools flat.
     def _default_tools(self) -> list:
         return [self._query_tool()]
 
     def _all_tools(self) -> list:
         return self.backend.get_tools()
+
+    # ------------------------------------------------------------------
+    # Sub-agent
+    # ------------------------------------------------------------------
 
     async def _aget_query_agent(self, run_context):
         return self._ensure_agent()

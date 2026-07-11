@@ -1,3 +1,14 @@
+"""PlaywrightMCPBackend — browser automation via Playwright's MCP server.
+
+Runs `npx @playwright/mcp@latest` as a subprocess and exposes browser
+tools (navigate, snapshot, screenshot, click, type) to the calling agent.
+
+Default is readonly=True, which excludes interaction tools (click, type,
+etc.) for safe browsing. Set readonly=False for full browser control.
+
+Requires Node.js 18+ (npx downloads the package on first run).
+"""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -5,10 +16,9 @@ from typing import Any, Literal
 
 from agno.context.backend import ContextBackend
 from agno.context.provider import Status
-from agno.utils.log import log_info, log_warning
+from agno.utils.log import log_warning
 
-# Tools that modify page state — excluded when readonly=True
-INTERACTION_TOOLS = {
+_INTERACTION_TOOLS = {
     "browser_click",
     "browser_type",
     "browser_fill_form",
@@ -71,15 +81,12 @@ class PlaywrightMCPBackend(ContextBackend):
         if self.browser != "chromium":
             cmd_args.append(f"--browser={self.browser}")
 
-        server_params = StdioServerParameters(command="npx", args=cmd_args)
-
-        # Merge user excludes with interaction tools when readonly
         exclude = set(self.exclude_tools) if self.exclude_tools else set()
         if self.readonly:
-            exclude.update(INTERACTION_TOOLS)
+            exclude.update(_INTERACTION_TOOLS)
 
         return MCPTools(
-            server_params=server_params,
+            server_params=StdioServerParameters(command="npx", args=cmd_args),
             transport="stdio",
             include_tools=self.include_tools,
             exclude_tools=list(exclude) if exclude else None,
@@ -88,11 +95,11 @@ class PlaywrightMCPBackend(ContextBackend):
         )
 
     async def asetup(self) -> None:
+        """Start the Playwright MCP server and connect."""
         if self._mcp_tools is None:
             self._mcp_tools = self._build_tools()
         if getattr(self._mcp_tools, "initialized", False):
             return
-        log_info(f"PlaywrightMCPBackend: starting npx @playwright/mcp@latest ({self.browser})")
         try:
             await self._mcp_tools._connect()
         except Exception as exc:
@@ -100,6 +107,7 @@ class PlaywrightMCPBackend(ContextBackend):
             self._mcp_tools = None
 
     async def aclose(self) -> None:
+        """Stop the MCP server and clear cached state."""
         tools = self._mcp_tools
         self._mcp_tools = None
         if tools is None:
