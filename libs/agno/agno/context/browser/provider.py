@@ -5,8 +5,9 @@ Browser Context Provider
 Browser automation via a configurable backend. Wraps backend tools in a
 sub-agent that handles natural-language browsing requests.
 
-Default backend is PlaywrightMCPBackend (readonly=True), which runs
-Playwright's MCP server with interaction tools excluded for safety.
+Default backend is ``PlaywrightMCPBackend`` with ``readonly=True``, which
+excludes interaction tools (click, type, etc.) for safe browsing. Set
+``readonly=False`` on the backend for full browser control.
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ class BrowserContextProvider(ContextProvider):
     ) -> None:
         super().__init__(id=id, name=name, mode=mode, model=model)
         self.backend = backend
-        self.instructions_text = instructions if instructions is not None else DEFAULT_INSTRUCTIONS
+        self.instructions_text = instructions if instructions is not None else DEFAULT_BROWSER_INSTRUCTIONS
         self._agent: Agent | None = None
 
     def status(self) -> Status:
@@ -109,24 +110,25 @@ class BrowserContextProvider(ContextProvider):
         )
 
 
-DEFAULT_INSTRUCTIONS = """\
+DEFAULT_BROWSER_INSTRUCTIONS = """\
 You browse the web to find information.
 
 ## Workflow
 
-1. **Navigate first.** Use `browser_navigate` to go to a URL.
+1. **Navigate first.** Use the navigate tool to go to a URL.
 
-2. **Take a snapshot.** Use `browser_snapshot` to get the page's accessibility
+2. **Take a snapshot.** Use the snapshot tool to get the page's accessibility
    tree. This shows interactive elements with their targets.
 
-3. **Use screenshots sparingly.** Only use `browser_take_screenshot` when you
+3. **Use screenshots sparingly.** Only use the screenshot tool when you
    need visual layout, images, or content not in the accessibility tree.
 
 4. **Extract information.** Read the snapshot to find what you need. Quote
    relevant text verbatim. Include URLs for pages you visit.
 
-5. **Interact when needed.** Use `browser_click` and `browser_type` to fill
-   forms or navigate via buttons when direct URL navigation isn't possible.
+5. **Follow links via URL.** Extract the href from the snapshot and navigate
+   to it directly. If direct navigation isn't possible and interaction tools
+   are available, use click/type as a fallback.
 
 ## Safety
 

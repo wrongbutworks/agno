@@ -11,13 +11,14 @@ Requires Node.js 18+ (npx downloads the package on first run).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Literal
 
 from agno.context.backend import ContextBackend
 from agno.context.provider import Status
 from agno.utils.log import log_warning
 
-_INTERACTION_TOOLS = {
+_INTERACTION_TOOLS: Sequence[str] = (
     "browser_click",
     "browser_type",
     "browser_fill_form",
@@ -27,11 +28,11 @@ _INTERACTION_TOOLS = {
     "browser_handle_dialog",
     "browser_press_key",
     "browser_evaluate",
-}
+)
 
 
 class PlaywrightMCPBackend(ContextBackend):
-    """Backend for BrowserContextProvider that runs Playwright's MCP server."""
+    """Backend for `BrowserContextProvider` that runs Playwright's MCP server."""
 
     def __init__(
         self,
@@ -39,16 +40,16 @@ class PlaywrightMCPBackend(ContextBackend):
         headless: bool = True,
         browser: Literal["chromium", "firefox", "webkit"] = "chromium",
         readonly: bool = True,
-        include_tools: list[str] | None = None,
-        exclude_tools: list[str] | None = None,
+        include_tools: Sequence[str] | None = None,
+        exclude_tools: Sequence[str] | None = None,
         tool_name_prefix: str | None = None,
         timeout_seconds: int = 60,
     ) -> None:
         self.headless = headless
         self.browser = browser
         self.readonly = readonly
-        self.include_tools = include_tools
-        self.exclude_tools = exclude_tools
+        self.include_tools = list(include_tools) if include_tools is not None else None
+        self.exclude_tools = list(exclude_tools) if exclude_tools is not None else None
         self.tool_name_prefix = tool_name_prefix
         self.timeout_seconds = timeout_seconds
         self._mcp_tools: Any = None
@@ -80,21 +81,25 @@ class PlaywrightMCPBackend(ContextBackend):
         if self.browser != "chromium":
             cmd_args.append(f"--browser={self.browser}")
 
-        exclude = set(self.exclude_tools) if self.exclude_tools else set()
+        exclude = list(self.exclude_tools) if self.exclude_tools else []
         if self.readonly:
-            exclude.update(_INTERACTION_TOOLS)
+            exclude.extend(_INTERACTION_TOOLS)
 
         return MCPTools(
             server_params=StdioServerParameters(command="npx", args=cmd_args),
             transport="stdio",
             include_tools=self.include_tools,
-            exclude_tools=list(exclude) if exclude else None,
+            exclude_tools=exclude if exclude else None,
             tool_name_prefix=self.tool_name_prefix,
             timeout_seconds=self.timeout_seconds,
         )
 
     async def asetup(self) -> None:
-        """Start the Playwright MCP server and connect."""
+        """Start the Playwright MCP server and connect.
+
+        On failure, logs a warning; the browser backend will be
+        unavailable until the next restart.
+        """
         if self._mcp_tools is None:
             self._mcp_tools = self._build_tools()
         if getattr(self._mcp_tools, "initialized", False):
@@ -102,7 +107,7 @@ class PlaywrightMCPBackend(ContextBackend):
         try:
             await self._mcp_tools._connect()
         except Exception as exc:
-            log_warning(f"PlaywrightMCPBackend setup failed — {type(exc).__name__}: {exc}")
+            log_warning(f"PlaywrightMCPBackend setup failed — {type(exc).__name__}: {exc}.")
             self._mcp_tools = None
 
     async def aclose(self) -> None:
